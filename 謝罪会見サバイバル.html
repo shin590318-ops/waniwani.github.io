@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>謝罪会見サバイバル</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            overflow: hidden;
+            background-color: #1a202c; /* Tailwind gray-900 */
+            touch-action: none; /* Prevent scroll on touch */
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #2d3748, #1a202c);
+        }
+
+        /* Flashbulb effect */
+        .flash {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes flash-anim {
+            0% { opacity: 0.8; }
+            100% { opacity: 0; }
+        }
+
+        .do-flash {
+            animation: flash-anim 0.3s ease-out;
+        }
+
+        /* Boss Styling */
+        #boss-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 20;
+        }
+
+        #boss {
+            font-size: 8rem;
+            line-height: 1;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
+            transition: transform 0.1s;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .shake-anim {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        /* Word Styling */
+        .word {
+            position: absolute;
+            background-color: white;
+            color: #e53e3e; /* red-600 */
+            border: 3px solid #c53030;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 900;
+            font-size: 1.1rem;
+            cursor: pointer;
+            user-select: none;
+            z-index: 30;
+            box-shadow: 4px 4px 0px #c53030;
+            white-space: nowrap;
+            /* Sharp speech bubble tail */
+            clip-path: polygon(0% 0%, 100% 0%, 100% 85%, 75% 85%, 75% 100%, 60% 85%, 0% 85%);
+            padding-bottom: 16px; /* extra padding for the tail */
+            transform-origin: center;
+        }
+
+        .word:active {
+            transform: scale(0.95);
+        }
+
+        /* Damage Popup */
+        .damage-popup {
+            position: absolute;
+            color: #fefcbf; /* yellow-100 */
+            font-size: 3rem;
+            font-weight: 900;
+            text-shadow: 
+                -2px -2px 0 #c53030,
+                2px -2px 0 #c53030,
+                -2px 2px 0 #c53030,
+                2px 2px 0 #c53030,
+                0px 5px 10px rgba(0,0,0,0.8);
+            pointer-events: none;
+            z-index: 50;
+            animation: float-up 1s ease-out forwards;
+        }
+
+        @keyframes float-up {
+            0% { opacity: 1; transform: translateY(0) scale(0.5); }
+            20% { transform: translateY(-20px) scale(1.2); }
+            100% { opacity: 0; transform: translateY(-80px) scale(1); }
+        }
+
+        /* UI */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #health-bar-container {
+            width: 100%;
+            height: 24px;
+            background-color: #4a5568;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid white;
+        }
+
+        #health-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f56565, #e53e3e);
+            transition: width 0.3s ease-out;
+            width: 100%;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- Camera Flashes -->
+    <div id="flash-overlay" class="flash"></div>
+
+    <!-- HUD -->
+    <div class="absolute top-0 left-0 w-full p-4 z-40 flex justify-between items-center pointer-events-none">
+        <div class="glass-panel p-3 rounded-xl flex-1 max-w-xs mr-4">
+            <div class="text-white font-bold mb-1 text-sm">社長のメンタル (HP: <span id="hp-text">150</span>/150)</div>
+            <div id="health-bar-container">
+                <div id="health-bar-fill"></div>
+            </div>
+        </div>
+        <div class="glass-panel p-3 rounded-xl flex items-center justify-center min-w-[100px]">
+            <div class="text-white font-black text-2xl" id="timer-text">30.0s</div>
+        </div>
+    </div>
+
+    <!-- Boss Area -->
+    <div id="boss-container">
+        <div id="boss">👨‍💼</div>
+        <div class="text-white font-bold mt-2 bg-black/50 px-3 py-1 rounded-full text-sm">代表取締役社長</div>
+    </div>
+
+    <!-- Words spawn here -->
+    <div id="words-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none">
+        <!-- JS injects words here. Pointer-events re-enabled on words -->
+    </div>
+
+    <!-- Overlays -->
+    <!-- Title Screen -->
+    <div id="title-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-gray-900/90 backdrop-blur-sm">
+        <div class="text-center">
+            <h1 class="text-5xl md:text-7xl font-black text-white mb-4 drop-shadow-[0_5px_5px_rgba(229,62,62,0.8)] tracking-wider">
+                謝罪会見<br><span class="text-red-500 text-6xl md:text-8xl">サバイバル</span>
+            </h1>
+            <p class="text-gray-300 mb-8 text-lg md:text-xl max-w-md mx-auto leading-relaxed bg-black/40 p-4 rounded-lg">
+                社長のHPを削りきれ！<br>
+                同じ<span class="text-red-400 font-bold">「質問ワード」</span>を画面に残してからタップすると、<span class="text-yellow-400 font-bold">重複ボーナス</span>で大ダメージ！<br>
+                制限時間30秒以内に謝罪会見を終わらせろ！
+            </p>
+            <button id="start-btn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-4 px-12 rounded-full text-2xl shadow-[0_0_20px_rgba(229,62,62,0.6)] transition-transform hover:scale-105 active:scale-95">
+                会見スタート
+            </button>
+        </div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="result-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 hidden">
+        <div class="text-center px-4 max-w-2xl w-full">
+            <h2 id="result-title" class="text-6xl font-black text-white mb-6">結果</h2>
+            <div id="result-message" class="text-2xl md:text-4xl text-yellow-300 font-bold mb-10 leading-tight bg-gray-800 p-6 rounded-2xl border-4 border-gray-700 shadow-2xl">
+                <!-- Message goes here -->
+            </div>
+            <button id="restart-btn" class="bg-white text-gray-900 hover:bg-gray-200 font-bold py-4 px-12 rounded-full text-xl shadow-lg transition-transform hover:scale-105 active:scale-95">
+                もう一度会見を開く
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Game Configuration
+    const MAX_HP = 150;
+    const GAME_DURATION = 30; // seconds
+    const SPAWN_INTERVAL = 600; // ms
+    const WORD_LIST = [
+        'AIについて', 
+        '会社責任について', 
+        '無責任すぎる', 
+        '被害総額は', 
+        '被害者に対して', 
+        'ホワイトハッカー', 
+        '喋り過ぎ'
+    ];
+
+    // State Variables
+    let currentHp = MAX_HP;
+    let timeLeft = GAME_DURATION;
+    let isPlaying = false;
+    let activeWords = []; // Array of objects: { el, x, y, vx, vy, text }
+    
+    // Timers & Loops
+    let gameLoopId;
+    let spawnTimerId;
+    let countdownTimerId;
+    let flashTimerId;
+
+    // DOM Elements
+    const elHpText = document.getElementById('hp-text');
+    const elHealthFill = document.getElementById('health-bar-fill');
+    const elTimerText = document.getElementById('timer-text');
+    const elBoss = document.getElementById('boss');
+    const elWordsLayer = document.getElementById('words-layer');
+    const elTitleScreen = document.getElementById('title-screen');
+    const elResultScreen = document.getElementById('result-screen');
+    const elResultTitle = document.getElementById('result-title');
+    const elResultMessage = document.getElementById('result-message');
+    const elStartBtn = document.getElementById('start-btn');
+    const elRestartBtn = document.getElementById('restart-btn');
+    const elFlashOverlay = document.getElementById('flash-overlay');
+
+    // Event Listeners
+    elStartBtn.addEventListener('click', startGame);
+    elRestartBtn.addEventListener('click', startGame);
+
+    function startGame() {
+        // Reset State
+        currentHp = MAX_HP;
+        timeLeft = GAME_DURATION;
+        isPlaying = true;
+        activeWords.forEach(w => w.el.remove());
+        activeWords = [];
+        
+        // Update UI
+        updateHpUi();
+        elTimerText.textContent = timeLeft.toFixed(1) + 's';
+        elTitleScreen.classList.add('hidden');
+        elResultScreen.classList.add('hidden');
+        elBoss.classList.remove('shake-anim');
+
+        // Start Systems
+        spawnTimerId = setInterval(spawnWord, SPAWN_INTERVAL);
+        countdownTimerId = setInterval(updateTimer, 100); // 100ms for smooth decimal
+        flashTimerId = setInterval(randomFlash, 2000); // Random flashes
+        
+        lastFrameTime = performance.now();
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+    function endGame(isVictory) {
+        isPlaying = false;
+        clearInterval(spawnTimerId);
+        clearInterval(countdownTimerId);
+        clearInterval(flashTimerId);
+        cancelAnimationFrame(gameLoopId);
+
+        elResultScreen.classList.remove('hidden');
+
+        if (isVictory) {
+            elResultTitle.textContent = "会見打ち切り！";
+            elResultTitle.className = "text-6xl md:text-7xl font-black text-red-500 mb-6 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]";
+            elResultMessage.innerHTML = "社長の捨て台詞：<br><span class='text-4xl md:text-5xl text-white mt-4 block'>「命の砂時計を大事にしてください！」</span>";
+        } else {
+            elResultTitle.textContent = "時間切れ";
+            elResultTitle.className = "text-6xl md:text-7xl font-black text-blue-500 mb-6 drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]";
+            elResultMessage.innerHTML = "追及が甘い！<br><span class='text-2xl text-gray-300 mt-4 block'>ダメージが足りず、社長は逃げ切りました。</span>";
+        }
+    }
+
+    function updateTimer() {
+        if (!isPlaying) return;
+        timeLeft -= 0.1;
+        
+        if (timeLeft <= 0) {
+            timeLeft = 0;
+            elTimerText.textContent = '0.0s';
+            if (currentHp > 0) {
+                endGame(false); // Time out, loss
+            }
+        } else {
+            elTimerText.textContent = timeLeft.toFixed(1) + 's';
+            if (timeLeft <= 5) {
+                elTimerText.classList.add('text-red-500');
+            } else {
+                elTimerText.classList.remove('text-red-500');
+            }
+        }
+    }
+
+    function spawnWord() {
+        if (!isPlaying) return;
+
+        const text = WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+        const wordEl = document.createElement('div');
+        wordEl.className = 'word pointer-events-auto';
+        wordEl.textContent = text;
+
+        // Container dimensions
+        const containerW = elWordsLayer.clientWidth;
+        const containerH = elWordsLayer.clientHeight;
+
+        // Start position (random, but avoiding extreme edges)
+        let x = Math.random() * (containerW - 150) + 20;
+        let y = Math.random() * (containerH - 100) + 20;
+
+        // Random velocity
+        const speed = 2 + Math.random() * 2;
+        const angle = Math.random() * Math.PI * 2;
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+
+        wordEl.style.transform = `translate(${x}px, ${y}px)`;
+        
+        // Interaction
+        wordEl.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); // Prevent touch issues
+            handleWordClick(text);
+        });
+
+        elWordsLayer.appendChild(wordEl);
+
+        activeWords.push({ el: wordEl, x, y, vx, vy, text, width: 0, height: 0 });
+        
+        // Measure after appending
+        setTimeout(() => {
+            const rect = wordEl.getBoundingClientRect();
+            const wordData = activeWords.find(w => w.el === wordEl);
+            if(wordData) {
+                wordData.width = rect.width;
+                wordData.height = rect.height;
+            }
+        }, 0);
+    }
+
+    function handleWordClick(clickedText) {
+        if (!isPlaying) return;
+
+        // Find all matching words
+        const matchingWords = activeWords.filter(w => w.text === clickedText);
+        const count = matchingWords.length;
+        
+        if (count === 0) return;
+
+        // Calculate damage: count * count * 3
+        const damage = count * count * 3;
+        
+        // Remove matching words
+        matchingWords.forEach(w => {
+            // Visual pop effect before removing
+            w.el.style.transition = 'transform 0.2s, opacity 0.2s';
+            w.el.style.transform = `translate(${w.x}px, ${w.y}px) scale(1.5)`;
+            w.el.style.opacity = '0';
+            setTimeout(() => w.el.remove(), 200);
+        });
+
+        activeWords = activeWords.filter(w => w.text !== clickedText);
+
+        // Apply Damage
+        applyDamage(damage);
+
+        // Visual Feedback
+        triggerBossShake();
+        showDamagePopup(damage);
+        triggerFlash();
+    }
+
+    function applyDamage(amount) {
+        currentHp -= amount;
+        if (currentHp < 0) currentHp = 0;
+        updateHpUi();
+
+        if (currentHp === 0) {
+            endGame(true); // Victory
+        }
+    }
+
+    function updateHpUi() {
+        elHpText.textContent = Math.ceil(currentHp);
+        const percentage = Math.max(0, (currentHp / MAX_HP) * 100);
+        elHealthFill.style.width = percentage + '%';
+    }
+
+    function triggerBossShake() {
+        elBoss.classList.remove('shake-anim');
+        // Trigger reflow to restart animation
+        void elBoss.offsetWidth; 
+        elBoss.classList.add('shake-anim');
+        
+        // Boss reaction
+        elBoss.textContent = '😫';
+        setTimeout(() => {
+            if(isPlaying) elBoss.textContent = '👨‍💼';
+        }, 400);
+    }
+
+    function showDamagePopup(damage) {
+        const popup = document.createElement('div');
+        popup.className = 'damage-popup';
+        popup.textContent = damage;
+        
+        // Center of the boss
+        const bossRect = document.getElementById('boss-container').getBoundingClientRect();
+        const startX = bossRect.left + bossRect.width / 2 - 20 + (Math.random() * 40 - 20);
+        const startY = bossRect.top + bossRect.height / 2 - 20;
+
+        popup.style.left = startX + 'px';
+        popup.style.top = startY + 'px';
+
+        document.getElementById('game-container').appendChild(popup);
+
+        setTimeout(() => popup.remove(), 1000);
+    }
+
+    function triggerFlash() {
+        elFlashOverlay.classList.remove('do-flash');
+        void elFlashOverlay.offsetWidth;
+        elFlashOverlay.classList.add('do-flash');
+    }
+
+    function randomFlash() {
+        if(Math.random() > 0.5 && isPlaying) {
+            triggerFlash();
+        }
+    }
+
+    let lastFrameTime = 0;
+    function gameLoop(timestamp) {
+        if (!isPlaying) return;
+
+        // Calculate delta time for smooth movement regardless of framerate
+        const dt = (timestamp - lastFrameTime) / 16.66; // Normalize to roughly 60fps
+        lastFrameTime = timestamp;
+
+        const containerW = elWordsLayer.clientWidth;
+        const containerH = elWordsLayer.clientHeight;
+
+        activeWords.forEach(w => {
+            // Apply velocity
+            w.x += w.vx * (dt || 1);
+            w.y += w.vy * (dt || 1);
+
+            // Rough bounding box check (fallback if width/height not set yet)
+            const wWidth = w.width || 100; 
+            const wHeight = w.height || 40;
+
+            // Bounce off edges
+            if (w.x <= 0) {
+                w.x = 0;
+                w.vx *= -1;
+            } else if (w.x + wWidth >= containerW) {
+                w.x = containerW - wWidth;
+                w.vx *= -1;
+            }
+
+            // Top UI padding
+            const topPadding = 80;
+            if (w.y <= topPadding) {
+                w.y = topPadding;
+                w.vy *= -1;
+            } else if (w.y + wHeight >= containerH) {
+                w.y = containerH - wHeight;
+                w.vy *= -1;
+            }
+
+            // Update DOM
+            w.el.style.transform = `translate(${w.x}px, ${w.y}px)`;
+        });
+
+        gameLoopId = requestAnimationFrame(gameLoop);
+    }
+
+</script>
+</body>
+</html>
